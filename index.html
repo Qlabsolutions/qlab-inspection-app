@@ -2625,8 +2625,8 @@ function generateScopeOfWorkPDF() {
       var cx = isLeft ? ml : ml + cw + 8;
       if (isLeft) {
         doc.setFillColor(255, 255, 255); doc.setDrawColor(220, 220, 220);
-        doc.rect(ml,        y, cw, 24, 'SD');
-        doc.rect(ml + cw + 8, y, cw, 24, 'SD');
+        doc.rect(ml,          y, cw, 24, 'S');
+        doc.rect(ml + cw + 8, y, cw, 24, 'S');
       }
       doc.setFontSize(7); doc.setTextColor(...midGray); doc.setFont('helvetica', 'normal');
       doc.text(safeText(pair[0]) || ' ', cx + 4, y + 8);
