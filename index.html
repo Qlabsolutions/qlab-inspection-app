@@ -2508,163 +2508,168 @@ function getSowTaskVal(prefix, tasks) {
 }
 
 function generateScopeOfWorkPDF() {
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ unit: 'pt', format: 'letter' });
-  const W = 612, H = 792;
-  const ml = 40, mr = 572, lw = mr - ml;
-  let y = 0;
+  try {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'pt', format: 'letter' });
+    const W = 612, H = 792;
+    const ml = 40, mr = 572, lw = mr - ml;
+    let y = 50;
 
-  const green    = [39, 174, 96];
-  const darkGray = [44, 44, 44];
-  const midGray  = [100, 100, 100];
-  const lightGray= [245, 245, 245];
+    const green     = [39, 174, 96];
+    const darkGray  = [44, 44, 44];
+    const midGray   = [100, 100, 100];
+    const lightGray = [245, 245, 245];
 
-  // ── helpers ──────────────────────────────────────────────────────────────
-  function checkPage(need = 20) {
-    if (y + need > H - 40) {
-      doc.addPage();
-      y = 40;
-      // footer on each page
-      doc.setFontSize(8); doc.setTextColor(...midGray); doc.setFont('helvetica','normal');
-      doc.text('Qlab Solutions  •  qlabsolutionsusa.com  •  (786) 746-7599', W/2, H - 20, { align:'center' });
+    // Safe text helper — never pass null/undefined to doc.text
+    const safeText = (v) => String(v || '').substring(0, 80);
+
+    // ── helpers ─────────────────────────────────────────────────────────────
+    function checkPage(need) {
+      need = need || 20;
+      if (y + need > H - 50) {
+        doc.addPage();
+        y = 50;
+        doc.setFontSize(8); doc.setTextColor(...midGray); doc.setFont('helvetica', 'normal');
+        doc.text('Qlab Solutions  •  qlabsolutionsusa.com  •  (786) 746-7599', W / 2, H - 20, { align: 'center' });
+      }
     }
-  }
 
-  function sectionHeader(title) {
-    checkPage(20);
-    doc.setFillColor(...green);
-    doc.rect(ml, y, lw, 18, 'F');
-    doc.setFontSize(9.5); doc.setTextColor(255,255,255); doc.setFont('helvetica','bold');
-    doc.text(title, ml + 6, y + 13);
-    y += 18;
-  }
-
-  function taskRow(label, value, isNA, rowIdx) {
-    checkPage(16);
-    if (rowIdx % 2 === 0) { doc.setFillColor(...lightGray); doc.rect(ml, y, lw, 15, 'F'); }
-    doc.setFontSize(8); doc.setTextColor(...darkGray); doc.setFont('helvetica','normal');
-    // truncate label if too long
-    const lbl = label.length > 55 ? label.substring(0,52)+'...' : label;
-    doc.text(lbl, ml + 3, y + 10);
-    if (isNA) {
-      doc.setTextColor(...midGray); doc.text('N/A', mr - 30, y + 10);
-    } else if (value) {
-      doc.setTextColor(...green); doc.setFont('helvetica','bold');
-      doc.text(String(value).substring(0, 40), mr - 30, y + 10, { align:'right' });
-    }
-    doc.setDrawColor(220,220,220); doc.line(ml, y + 15, mr, y + 15);
-    y += 15;
-  }
-
-  function renderTasks(tasks, prefix) {
-    // column headers
-    checkPage(14);
-    doc.setFillColor(230,230,230); doc.rect(ml, y, lw, 13, 'F');
-    doc.setFontSize(8); doc.setTextColor(...darkGray); doc.setFont('helvetica','bold');
-    doc.text('Task', ml + 3, y + 9);
-    doc.text('Value', mr - 30, y + 9, { align:'right' });
-    y += 13;
-    tasks.forEach((t, i) => {
-      const el   = document.getElementById(`${prefix}-${i}`);
-      const naEl = document.getElementById(`${prefix}-${i}-na`);
-      const isNA = naEl && naEl.checked;
-      const val  = el ? el.value : '';
-      const label = t.label + (t.unit ? ' (' + t.unit + ')' : '');
-      taskRow(label, val, isNA, i);
-    });
-    y += 6;
-  }
-
-  // ── COVER / HEADER ────────────────────────────────────────────────────────
-  // Green header bar
-  doc.setFillColor(...green);
-  doc.rect(0, 0, W, 70, 'F');
-
-  // Real logo
-  try { doc.addImage(QLAB_LOGO_B64, 'PNG', ml, 8, 60, 24); } catch(e) {
-    doc.setFontSize(18); doc.setTextColor(255,255,255); doc.setFont('helvetica','bold');
-    doc.text('Qlab Solutions', ml, 32);
-  }
-
-  // Title
-  doc.setFontSize(16); doc.setTextColor(255,255,255); doc.setFont('helvetica','bold');
-  doc.text('SCOPE OF WORK', mr, 28, { align:'right' });
-  doc.setFontSize(9); doc.setFont('helvetica','normal');
-  doc.text('IICRC Certified  •  FL DBPR Licensed  •  24/7 Emergency', mr, 42, { align:'right' });
-
-  y = 80;
-
-  // ── JOB INFO ─────────────────────────────────────────────────────────────
-  const jobInfoPairs = [
-    ['Project Manager', document.getElementById('sow-pm')?.value || ''],
-    ['Inspector / Team', document.getElementById('sow-inspector')?.value || ''],
-    ['Job Number', document.getElementById('sow-job')?.value || ''],
-    ['Mitigation Date', document.getElementById('sow-mitig-date')?.value || ''],
-    ['Type of Loss', (() => {
-      const idx = SOW_HOUSE_TASKS.findIndex(t => t.label === 'Type of Loss');
-      const el = idx >= 0 ? document.getElementById('sow-h-' + idx) : null;
-      return el ? el.value : '';
-    })()],
-  ];
-  const address = document.getElementById('sow-address')?.value || '';
-
-  // Address block
-  doc.setFillColor(...lightGray); doc.rect(ml, y, lw, 22, 'F');
-  doc.setFontSize(9); doc.setTextColor(...darkGray); doc.setFont('helvetica','bold');
-  doc.text('Property Address', ml + 6, y + 8);
-  doc.setFont('helvetica','normal'); doc.setTextColor(...midGray);
-  doc.text(address, ml + 6, y + 17);
-  y += 26;
-
-  // Two-column job info grid
-  const colW = lw / 2 - 4;
-  jobInfoPairs.forEach(([lbl, val], i) => {
-    const cx = (i % 2 === 0) ? ml : ml + colW + 8;
-    if (i % 2 === 0) {
+    function sectionHeader(title) {
       checkPage(22);
-      const rowY = y;
-      // Draw both cells at once
-      doc.setFillColor(255,255,255);
-      doc.setDrawColor(220,220,220);
-      doc.rect(ml, rowY, colW, 20, 'SD');
-      doc.rect(ml + colW + 8, rowY, colW, 20, 'SD');
+      doc.setFillColor(...green);
+      doc.rect(ml, y, lw, 18, 'F');
+      doc.setFontSize(9.5); doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold');
+      doc.text(safeText(title), ml + 6, y + 13);
+      y += 22;
     }
-    doc.setFontSize(7.5); doc.setTextColor(...midGray); doc.setFont('helvetica','normal');
-    doc.text(lbl.toUpperCase(), cx + 4, y + 7);
-    doc.setFontSize(9); doc.setTextColor(...darkGray); doc.setFont('helvetica','bold');
-    doc.text(val || '—', cx + 4, y + 15);
-    if (i % 2 === 1 || i === jobInfoPairs.length - 1) y += 24;
-  });
-  y += 10;
 
-  // ── HOUSE DATA ────────────────────────────────────────────────────────────
-  sectionHeader('HOUSE DATA');
-  renderTasks(SOW_HOUSE_TASKS, 'sow-h');
+    function taskRow(label, value, isNA, rowIdx) {
+      checkPage(16);
+      if (rowIdx % 2 === 0) {
+        doc.setFillColor(...lightGray);
+        doc.rect(ml, y, lw, 15, 'F');
+      }
+      doc.setFontSize(8); doc.setTextColor(...darkGray); doc.setFont('helvetica', 'normal');
+      const lbl = safeText(label).substring(0, 60);
+      doc.text(lbl, ml + 3, y + 10);
+      if (isNA) {
+        doc.setTextColor(...midGray);
+        doc.text('N/A', mr - 3, y + 10, { align: 'right' });
+      } else if (value) {
+        doc.setTextColor(...green); doc.setFont('helvetica', 'bold');
+        doc.text(safeText(value).substring(0, 35), mr - 3, y + 10, { align: 'right' });
+      }
+      doc.setDrawColor(220, 220, 220);
+      doc.line(ml, y + 15, mr, y + 15);
+      y += 15;
+    }
 
-  // ── ROOMS ─────────────────────────────────────────────────────────────────
-  sowRooms.forEach(room => {
-    const svc = room.service || 'mitigation';
-    const tasks = SOW_SERVICE_TASKS[svc] || SOW_MITIGATION_TASKS;
-    const svcLabel = SERVICE_LABELS[svc] || '';
-    sectionHeader(`ROOM: ${room.name || 'Unnamed Room'}   [${svcLabel}]`);
-    renderTasks(tasks, `sow-r${room.id}`);
-  });
+    function renderTasks(tasks, prefix) {
+      checkPage(14);
+      doc.setFillColor(230, 230, 230); doc.rect(ml, y, lw, 13, 'F');
+      doc.setFontSize(8); doc.setTextColor(...darkGray); doc.setFont('helvetica', 'bold');
+      doc.text('Task', ml + 3, y + 9);
+      doc.text('Value', mr - 3, y + 9, { align: 'right' });
+      y += 13;
+      tasks.forEach(function(t, i) {
+        var el   = document.getElementById(prefix + '-' + i);
+        var naEl = document.getElementById(prefix + '-' + i + '-na');
+        var isNA = !!(naEl && naEl.checked);
+        var val  = el ? (el.value || '') : '';
+        var label = t.label + (t.unit ? ' (' + t.unit + ')' : '');
+        taskRow(label, val, isNA, i);
+      });
+      y += 8;
+    }
 
-  // ── PHOTOS ────────────────────────────────────────────────────────────────
-  const sowPhotos = photos['sow'] || [];
-  if (sowPhotos.length > 0) {
-    sectionHeader('PHOTOS');
-    sowPhotos.forEach(src => {
-      checkPage(160);
-      try { doc.addImage(src, 'JPEG', ml, y, 200, 150); y += 158; } catch(e) {}
+    // ── HEADER BAR ──────────────────────────────────────────────────────────
+    doc.setFillColor(...green);
+    doc.rect(0, 0, W, 60, 'F');
+    try {
+      doc.addImage(QLAB_LOGO_B64, 'PNG', ml, 8, 60, 24);
+    } catch(logoErr) {
+      doc.setFontSize(14); doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold');
+      doc.text('Qlab Solutions', ml, 30);
+    }
+    doc.setFontSize(15); doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold');
+    doc.text('SCOPE OF WORK', mr, 26, { align: 'right' });
+    doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+    doc.text('IICRC Certified  •  FL DBPR Licensed  •  (786) 746-7599', mr, 40, { align: 'right' });
+
+    y = 75;
+
+    // ── JOB INFO ────────────────────────────────────────────────────────────
+    var address = (document.getElementById('sow-address') || {}).value || '';
+    doc.setFillColor(...lightGray); doc.rect(ml, y, lw, 24, 'F');
+    doc.setFontSize(8); doc.setTextColor(...midGray); doc.setFont('helvetica', 'normal');
+    doc.text('PROPERTY ADDRESS', ml + 5, y + 8);
+    doc.setFontSize(10); doc.setTextColor(...darkGray); doc.setFont('helvetica', 'bold');
+    doc.text(safeText(address) || ' ', ml + 5, y + 19);
+    y += 30;
+
+    var typeOfLossIdx = SOW_HOUSE_TASKS.findIndex(function(t) { return t.label === 'Type of Loss'; });
+    var typeOfLossEl  = typeOfLossIdx >= 0 ? document.getElementById('sow-h-' + typeOfLossIdx) : null;
+
+    var infoRows = [
+      ['PROJECT MANAGER',  (document.getElementById('sow-pm')         || {}).value || '—'],
+      ['INSPECTOR / TEAM', (document.getElementById('sow-inspector')   || {}).value || '—'],
+      ['JOB NUMBER',       (document.getElementById('sow-job')         || {}).value || '—'],
+      ['MITIGATION DATE',  (document.getElementById('sow-mitig-date')  || {}).value || '—'],
+      ['TYPE OF LOSS',     typeOfLossEl ? (typeOfLossEl.value || '—') : '—'],
+    ];
+
+    var cw = (lw - 8) / 2;
+    infoRows.forEach(function(pair, i) {
+      var isLeft = (i % 2 === 0);
+      if (isLeft) { checkPage(26); }
+      var cx = isLeft ? ml : ml + cw + 8;
+      if (isLeft) {
+        doc.setFillColor(255, 255, 255); doc.setDrawColor(220, 220, 220);
+        doc.rect(ml,        y, cw, 24, 'SD');
+        doc.rect(ml + cw + 8, y, cw, 24, 'SD');
+      }
+      doc.setFontSize(7); doc.setTextColor(...midGray); doc.setFont('helvetica', 'normal');
+      doc.text(safeText(pair[0]) || ' ', cx + 4, y + 8);
+      doc.setFontSize(9); doc.setTextColor(...darkGray); doc.setFont('helvetica', 'bold');
+      doc.text(safeText(pair[1]) || ' ', cx + 4, y + 18);
+      if (!isLeft || i === infoRows.length - 1) { y += 28; }
     });
+    y += 8;
+
+    // ── HOUSE DATA ──────────────────────────────────────────────────────────
+    sectionHeader('HOUSE DATA');
+    renderTasks(SOW_HOUSE_TASKS, 'sow-h');
+
+    // ── ROOMS ────────────────────────────────────────────────────────────────
+    sowRooms.forEach(function(room) {
+      var svc      = room.service || 'mitigation';
+      var tasks    = SOW_SERVICE_TASKS[svc] || SOW_MITIGATION_TASKS;
+      var svcLabel = SERVICE_LABELS[svc] || '';
+      sectionHeader('ROOM: ' + (room.name || 'Unnamed') + '  [' + svcLabel + ']');
+      renderTasks(tasks, 'sow-r' + room.id);
+    });
+
+    // ── PHOTOS ───────────────────────────────────────────────────────────────
+    var sowPhotos = (photos && photos['sow']) ? photos['sow'] : [];
+    if (sowPhotos.length > 0) {
+      sectionHeader('PHOTOS');
+      sowPhotos.forEach(function(src) {
+        checkPage(165);
+        try { doc.addImage(src, 'JPEG', ml, y, 200, 150); y += 158; } catch(e) {}
+      });
+    }
+
+    // ── LAST PAGE FOOTER ─────────────────────────────────────────────────────
+    doc.setFontSize(8); doc.setTextColor(...midGray); doc.setFont('helvetica', 'normal');
+    doc.text('Qlab Solutions  •  qlabsolutionsusa.com  •  (786) 746-7599', W / 2, H - 20, { align: 'center' });
+
+    var jobNum = (document.getElementById('sow-job') || {}).value || 'Draft';
+    doc.save('Qlab-Scope-of-Work-' + jobNum + '.pdf');
+
+  } catch(err) {
+    console.error('SOW PDF error:', err);
+    alert('Could not generate PDF: ' + err.message);
   }
-
-  // ── FOOTER ON LAST PAGE ───────────────────────────────────────────────────
-  doc.setFontSize(8); doc.setTextColor(...midGray); doc.setFont('helvetica','normal');
-  doc.text('Qlab Solutions  •  qlabsolutionsusa.com  •  (786) 746-7599', W/2, H - 20, { align:'center' });
-
-  doc.save(`Qlab-Scope-of-Work-${document.getElementById('sow-job')?.value || 'Draft'}.pdf`);
 }
 
 // ── MOISTURE READINGS ─────────────────────────────────────────────────────────
