@@ -1505,7 +1505,15 @@ async function generatePDF() {
 
     function newPage() {
       doc.addPage();
-      y = 10;
+      // Compact header bar on continuation pages
+      doc.setFillColor(28, 28, 26);
+      doc.rect(0, 0, W, 12, 'F');
+      doc.setFillColor(...green);
+      doc.rect(0, 12, W, 1.5, 'F');
+      try { doc.addImage(QLAB_LOGO_B64, 'PNG', margin, 1.5, 22, 9); } catch(e) {}
+      doc.setFontSize(7); doc.setFont(undefined, 'normal'); doc.setTextColor(200, 200, 200);
+      doc.text('PROPERTY DAMAGE INSPECTION REPORT', W - margin, 8, { align: 'right' });
+      y = 20;
       // page footer
       doc.setFontSize(8); doc.setTextColor(...mid);
       doc.text('Qlab Solutions — Property Damage Inspection', margin, 290);
@@ -1518,10 +1526,14 @@ async function generatePDF() {
 
     function sectionHeader(title, emoji = '') {
       checkY(14);
-      doc.setFillColor(...dark);
+      // Black background
+      doc.setFillColor(28, 28, 26);
       doc.roundedRect(margin, y, W - margin * 2, 10, 2, 2, 'F');
-      doc.setFontSize(10); doc.setTextColor(255, 255, 255); doc.setFont(undefined, 'bold');
-      doc.text((emoji ? emoji + '  ' : '') + title.toUpperCase(), margin + 4, y + 7);
+      // Green left accent bar
+      doc.setFillColor(...green);
+      doc.rect(margin, y, 3, 10, 'F');
+      doc.setFontSize(9); doc.setTextColor(255, 255, 255); doc.setFont(undefined, 'bold');
+      doc.text(title.toUpperCase(), margin + 8, y + 7);
       y += 14;
     }
 
@@ -1565,18 +1577,25 @@ async function generatePDF() {
     }
 
     // ─── COVER PAGE ───
+    // Black header bar
+    doc.setFillColor(28, 28, 26);
+    doc.rect(0, 0, W, 60, 'F');
+    // Green accent stripe at bottom of header
     doc.setFillColor(...green);
-    doc.rect(0, 0, W, 55, 'F');
+    doc.rect(0, 57, W, 3, 'F');
 
     // Real Qlab logo
-    try { doc.addImage(QLAB_LOGO_B64, 'PNG', margin, 8, 50, 20); } catch(e) {
+    try { doc.addImage(QLAB_LOGO_B64, 'PNG', margin, 10, 55, 22); } catch(e) {
       doc.setFontSize(18); doc.setFont(undefined,'bold'); doc.setTextColor(255,255,255);
-      doc.text('Qlab Solutions', margin, 22);
+      doc.text('Qlab Solutions', margin, 28);
     }
-    doc.setFontSize(10); doc.setFont(undefined,'normal'); doc.setTextColor(255,255,255);
-    doc.text('Property Damage Inspection Report', margin + 54, 22);
+    // Title right-aligned
+    doc.setFontSize(11); doc.setFont(undefined,'bold'); doc.setTextColor(255,255,255);
+    doc.text('PROPERTY DAMAGE INSPECTION REPORT', W - margin, 24, { align: 'right' });
+    doc.setFontSize(8); doc.setFont(undefined,'normal'); doc.setTextColor(...green);
+    doc.text('IICRC Certified  •  FL DBPR Licensed  •  (786) 746-7599', W - margin, 34, { align: 'right' });
 
-    y = 70;
+    y = 76;
     doc.setFontSize(13); doc.setFont(undefined, 'bold'); doc.setTextColor(...dark);
     doc.text(document.getElementById('clientName').value || 'Client Name', margin, y); y += 8;
     doc.setFont(undefined, 'normal'); doc.setFontSize(10); doc.setTextColor(...mid);
@@ -2537,10 +2556,13 @@ function generateScopeOfWorkPDF() {
 
     function sectionHeader(title) {
       checkPage(22);
-      doc.setFillColor(...green);
+      doc.setFillColor(28, 28, 26);
       doc.rect(ml, y, lw, 18, 'F');
+      // Green left accent
+      doc.setFillColor(...green);
+      doc.rect(ml, y, 4, 18, 'F');
       doc.setFontSize(9.5); doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold');
-      doc.text(safeText(title), ml + 6, y + 13);
+      doc.text(safeText(title), ml + 10, y + 13);
       y += 22;
     }
 
@@ -2584,17 +2606,20 @@ function generateScopeOfWorkPDF() {
     }
 
     // ── HEADER BAR ──────────────────────────────────────────────────────────
-    doc.setFillColor(...green);
+    doc.setFillColor(28, 28, 26);
     doc.rect(0, 0, W, 60, 'F');
+    // Green accent stripe
+    doc.setFillColor(...green);
+    doc.rect(0, 57, W, 3, 'F');
     try {
-      doc.addImage(QLAB_LOGO_B64, 'PNG', ml, 8, 60, 24);
+      doc.addImage(QLAB_LOGO_B64, 'PNG', ml, 10, 60, 24);
     } catch(logoErr) {
       doc.setFontSize(14); doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold');
       doc.text('Qlab Solutions', ml, 30);
     }
     doc.setFontSize(15); doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold');
     doc.text('SCOPE OF WORK', mr, 26, { align: 'right' });
-    doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(...green);
     doc.text('IICRC Certified  •  FL DBPR Licensed  •  (786) 746-7599', mr, 40, { align: 'right' });
 
     y = 75;
@@ -2732,14 +2757,15 @@ function generateMoisturePDF() {
   const midGray = [100, 100, 100];
 
   // Header bar with real logo
-  doc.setFillColor(...green); doc.rect(0, 0, 792, 50, 'F');
+  doc.setFillColor(28, 28, 26); doc.rect(0, 0, 792, 50, 'F');
+  doc.setFillColor(...green); doc.rect(0, 47, 792, 3, 'F');
   try { doc.addImage(QLAB_LOGO_B64, 'PNG', ml, 6, 60, 24); } catch(e) {
     doc.setFontSize(16); doc.setTextColor(255,255,255); doc.setFont('helvetica','bold');
     doc.text('Qlab Solutions', ml, 30);
   }
   doc.setFontSize(15); doc.setTextColor(255,255,255); doc.setFont('helvetica','bold');
   doc.text('DAILY MOISTURE READINGS', mr, 22, { align:'right' });
-  doc.setFontSize(8); doc.setFont('helvetica','normal');
+  doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(...green);
   doc.text('IICRC Certified  •  FL DBPR Licensed  •  (786) 746-7599', mr, 36, { align:'right' });
   y = 60;
 
@@ -2761,9 +2787,10 @@ function generateMoisturePDF() {
   y += 14;
 
   // Psychrometric table
-  doc.setFillColor(...green); doc.rect(ml, y, lw, 18, 'F');
+  doc.setFillColor(28, 28, 26); doc.rect(ml, y, lw, 18, 'F');
+  doc.setFillColor(...green); doc.rect(ml, y, 4, 18, 'F');
   doc.setFontSize(10); doc.setTextColor(255,255,255); doc.setFont('helvetica','bold');
-  doc.text('Psychrometric Readings', ml+6, y+13); y += 18;
+  doc.text('Psychrometric Readings', ml+10, y+13); y += 18;
 
   const pHdrs = ['Day','Date','Ext Temp','Ext RH%','Ext Dew Pt','Int Temp','Int RH%','Int Dew Pt'];
   const pCols = ['date','ext-temp','ext-rh','ext-dew','int-temp','int-rh','int-dew'];
@@ -2790,9 +2817,10 @@ function generateMoisturePDF() {
 
   // MC table
   if (y > 480) { doc.addPage(); y = 50; }
-  doc.setFillColor(...green); doc.rect(ml, y, lw, 18, 'F');
+  doc.setFillColor(28, 28, 26); doc.rect(ml, y, lw, 18, 'F');
+  doc.setFillColor(...green); doc.rect(ml, y, 4, 18, 'F');
   doc.setFontSize(10); doc.setTextColor(255,255,255); doc.setFont('helvetica','bold');
-  doc.text('Interior Moisture Content (MC)', ml+6, y+13); y += 18;
+  doc.text('Interior Moisture Content (MC)', ml+10, y+13); y += 18;
 
   const mHdrs = ['Day','MC Walls','MC Floor','MC Studs','MC Ceiling','MC Cabinets','MC Other'];
   const mCols = ['walls','floor','studs','ceil','cab','other'];
