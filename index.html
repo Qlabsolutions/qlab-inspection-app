@@ -513,7 +513,6 @@
 <!-- ═══════════════════════════════════════════
      SCREEN 0: WELCOME
 ════════════════════════════════════════════ -->
-<!-- WELCOME SCREEN -->
 <div class="screen active" id="screen-welcome" style="background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;height:100%;padding:0 24px;box-sizing:border-box;position:fixed;top:0;left:0;right:0;bottom:0;overflow:auto;">
   <img id="welcome-logo-img" src="" alt="Qlab Solutions" style="width:200px;max-width:80%;margin-bottom:32px;">
   <h1 style="color:#fff;font-size:1.5rem;font-weight:700;text-align:center;margin:0 0 28px 0;line-height:1.3;">Welcome to<br>Qlab Solutions</h1>
@@ -1236,13 +1235,6 @@ function prevScreen() {
 // ─────────────────────────────────────────
 // TOGGLE (Yes/No)
 // ─────────────────────────────────────────
-function toggle(key, yesId, noId) {
-  const cur = toggles[key];
-  const newVal = cur === 'yes' ? null : 'yes'; // just toggle yes for simplicity
-  // Actually do proper toggle
-  return; // handled below
-}
-
 document.addEventListener('click', e => {
   const btn = e.target.closest('.toggle-btn');
   if (!btn) return;
@@ -1654,7 +1646,6 @@ async function generatePDF() {
       ['Damaged structure', 'extStructure'],
     ];
     extItems.forEach(([label, key]) => {
-      const val = checks[key] ? 'Yes' : 'No';
       fieldRow(label, '', checks[key] ? 'yes' : 'no');
     });
     if (document.getElementById('extNotes').value) {
@@ -1689,8 +1680,6 @@ async function generatePDF() {
       checkY(12);
       doc.setFontSize(10); doc.setFont(undefined, 'bold'); doc.setTextColor(...dark);
       doc.text('Room: ' + (room.name || 'Unnamed room'), margin, y); y += 7;
-      fieldRow('Ceiling', getChips('room-ceil-'+idx).join(', ') || 'None');
-      fieldRow('Walls', getChips('room-wall-'+idx).join(', ') || 'None');
       const ceilMat = getChips('room-ceilmat-'+idx).join(', ');
       if (ceilMat) fieldRow('Ceiling material', ceilMat);
       fieldRow('Ceiling damage', getChips('room-ceil-'+idx).join(', ') || 'None');
@@ -1976,7 +1965,6 @@ async function saveToSupabase() {
 
 <!-- Tooltip popup -->
 <div id="tooltip-popup">
-  
   <div class="tip-label" id="tooltip-label"></div>
   <div class="tip-desc" id="tooltip-desc"></div>
 </div>
@@ -2232,7 +2220,7 @@ function startApp() {
   const welcomeScreen = document.getElementById('screen-welcome');
   if (welcomeScreen) welcomeScreen.style.display = 'none';
   const homeTitle = document.getElementById('home-title');
-  if (homeTitle) homeTitle.textContent = inspectorName ? 'Welcome back, ' + inspectorName + '!' : 'Welcome back!';
+  if (homeTitle) homeTitle.textContent = inspectorName ? 'Welcome, ' + inspectorName + '!' : 'Welcome!';
   document.getElementById('screen-home').classList.add('active');
   const nav = document.getElementById('navBottom');
   if (nav) nav.style.display = 'none';
@@ -2388,8 +2376,6 @@ function sowRenderHouseTasks() {
 }
 
 // ── Service-specific task lists ───────────────────────────────────────────────
-const SOW_MITIGATION_TASKS = SOW_ROOM_TASKS; // full list
-
 const SOW_FIRE_TASKS = [
   { label:'Soot / Smoke Assessment', unit:'SFT', tip:'Square footage of surfaces affected by soot or smoke residue. Documents the scope for cleaning and deodorization per IICRC S700.' },
   { label:'Dry Sponge Cleaning', unit:'SFT', tip:'Square footage cleaned with a dry chemical sponge to remove loose soot from ceilings, walls, and surfaces before wet cleaning.' },
@@ -2469,7 +2455,7 @@ const SOW_MOLD_TASKS = [
 
 const SOW_SERVICE_TASKS = {
   tarp:        SOW_TARP_TASKS,
-  mitigation:  SOW_MITIGATION_TASKS,
+  mitigation:  SOW_ROOM_TASKS,
   mold:        SOW_MOLD_TASKS,
   fire:        SOW_FIRE_TASKS,
 };
@@ -2678,7 +2664,7 @@ function generateScopeOfWorkPDF() {
     // ── ROOMS ────────────────────────────────────────────────────────────────
     sowRooms.forEach(function(room) {
       var svc      = room.service || 'mitigation';
-      var tasks    = SOW_SERVICE_TASKS[svc] || SOW_MITIGATION_TASKS;
+      var tasks    = SOW_SERVICE_TASKS[svc] || SOW_ROOM_TASKS;
       var svcLabel = SERVICE_LABELS[svc] || '';
       sectionHeader('ROOM: ' + (room.name || 'Unnamed') + '  [' + svcLabel + ']');
       renderTasks(tasks, 'sow-r' + room.id);
