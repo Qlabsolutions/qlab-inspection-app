@@ -1508,17 +1508,17 @@ async function generatePDF() {
       doc.addPage();
       // Compact header bar on continuation pages
       doc.setFillColor(28, 28, 26);
-      doc.rect(0, 0, W, 12, 'F');
+      doc.rect(0, 0, W, 20, 'F');
       doc.setFillColor(...green);
-      doc.rect(0, 12, W, 1.5, 'F');
-      try { doc.addImage(QLAB_LOGO_B64, 'PNG', margin, 1.5, 22, 9); } catch(e) {}
+      doc.rect(0, 20, W, 1.5, 'F');
+      try { doc.addImage(QLAB_LOGO_B64, 'PNG', margin, 2, 24, 18); } catch(e) {}
       doc.setFontSize(7); doc.setFont(undefined, 'normal'); doc.setTextColor(200, 200, 200);
-      doc.text('PROPERTY DAMAGE INSPECTION REPORT', W - margin, 8, { align: 'right' });
-      y = 20;
+      doc.text('PROPERTY DAMAGE INSPECTION REPORT', W - margin, 13, { align: 'right' });
+      y = 28;
       // page footer
       doc.setFontSize(8); doc.setTextColor(...mid);
-      doc.text('Qlab Solutions — Property Damage Inspection', margin, 290);
-      doc.text('qlabsolutionsusa.com  |  (786) 746-7599  |  admin@qlabsolutions.co', W - margin, 290, { align: 'right' });
+      doc.text('Qlab Solutions — Property Damage Inspection', margin, 288);
+      doc.text('qlabsolutionsusa.com  |  (786) 746-7599  |  admin@qlabsolutions.co', W - margin, 288, { align: 'right' });
     }
 
     function checkY(needed = 20) {
@@ -1586,7 +1586,7 @@ async function generatePDF() {
     doc.rect(0, 57, W, 3, 'F');
 
     // Real Qlab logo
-    try { doc.addImage(QLAB_LOGO_B64, 'PNG', margin, 10, 55, 22); } catch(e) {
+    try { doc.addImage(QLAB_LOGO_B64, 'PNG', margin, 10, 55, 41); } catch(e) {
       doc.setFontSize(18); doc.setFont(undefined,'bold'); doc.setTextColor(255,255,255);
       doc.text('Qlab Solutions', margin, 28);
     }
@@ -1782,7 +1782,7 @@ async function generatePDF() {
     for (let i = 1; i <= pageCount; i++) {
       doc.setPage(i);
       doc.setFontSize(8); doc.setTextColor(...mid);
-      doc.text(`Page ${i} of ${pageCount}`, W - margin, 290, { align: 'right' });
+      doc.text(`Page ${i} of ${pageCount}`, W/2, 288, { align: 'center' });
     }
 
     // Save to Supabase if configured
@@ -1942,6 +1942,7 @@ async function saveToSupabase() {
         <thead>
           <tr>
             <th>Day</th>
+            <th>Date</th>
             <th class="has-moist-tip" data-tip="Moisture Content of walls (drywall or plaster) measured with a pin or pinless meter. IICRC dry standard: ≤ 16% for drywall, ≤ 19% for wood-framed walls.">MC Walls</th>
             <th class="has-moist-tip" data-tip="Moisture Content of floor material. Dry standard varies by material: hardwood ≤ 12%, subfloor (plywood/OSB) ≤ 16%, concrete — use relative humidity in-situ test.">MC Floor</th>
             <th class="has-moist-tip" data-tip="Moisture Content of exposed wall studs (wood framing). IICRC dry standard: ≤ 19%. Elevated readings in studs indicate intra-wall drying is still active.">MC Studs</th>
@@ -2461,10 +2462,10 @@ const SOW_SERVICE_TASKS = {
 };
 
 const SERVICE_LABELS = {
-  tarp:        '🏚️ Roof Tarp',
-  mitigation:  '💧 Water Mitigation',
-  mold:        '🍄 Mold Remediation',
-  fire:        '🔥 Fire Restoration',
+  tarp:        'Roof Tarp',
+  mitigation:  'Water Mitigation',
+  mold:        'Mold Remediation',
+  fire:        'Fire Restoration',
 };
 
 let sowRooms = [];
@@ -2602,22 +2603,22 @@ function generateScopeOfWorkPDF() {
 
     // ── HEADER BAR ──────────────────────────────────────────────────────────
     doc.setFillColor(28, 28, 26);
-    doc.rect(0, 0, W, 60, 'F');
+    doc.rect(0, 0, W, 72, 'F');
     // Green accent stripe
     doc.setFillColor(...green);
-    doc.rect(0, 57, W, 3, 'F');
+    doc.rect(0, 69, W, 3, 'F');
     try {
-      doc.addImage(QLAB_LOGO_B64, 'PNG', ml, 10, 60, 24);
+      doc.addImage(QLAB_LOGO_B64, 'PNG', ml, 8, 56, 42);
     } catch(logoErr) {
       doc.setFontSize(14); doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold');
-      doc.text('Qlab Solutions', ml, 30);
+      doc.text('Qlab Solutions', ml, 36);
     }
     doc.setFontSize(15); doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold');
-    doc.text('SCOPE OF WORK', mr, 26, { align: 'right' });
+    doc.text('SCOPE OF WORK', mr, 30, { align: 'right' });
     doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(...green);
-    doc.text('IICRC Certified  •  FL DBPR Licensed  •  (786) 746-7599', mr, 40, { align: 'right' });
+    doc.text('IICRC Certified  •  FL DBPR Licensed  •  (786) 746-7599', mr, 46, { align: 'right' });
 
-    y = 75;
+    y = 85;
 
     // ── JOB INFO ────────────────────────────────────────────────────────────
     var address = (document.getElementById('sow-address') || {}).value || '';
@@ -2698,6 +2699,95 @@ const MOISTURE_DAYS = 9; // max
 let psychroDays = 3;
 let mcDays = 3;
 
+// ── DEW POINT CALCULATION (Magnus formula, result in °F) ──────────────────────
+// Input: temp in °F, RH in %
+function calcDewPoint(tempF, rh) {
+  if (isNaN(tempF) || isNaN(rh) || rh <= 0 || rh > 100) return '';
+  const tempC = (tempF - 32) * 5 / 9;
+  const a = 17.625, b = 243.04;
+  const alpha = Math.log(rh / 100) + (a * tempC) / (b + tempC);
+  const dewC = (b * alpha) / (a - alpha);
+  const dewF = dewC * 9 / 5 + 32;
+  return dewF.toFixed(1);
+}
+
+// ── DATE AUTO-FILL ────────────────────────────────────────────────────────────
+// Parse a date string typed by user — handles MM/DD, MM/DD/YY, MM/DD/YYYY
+function parseDateInput(str) {
+  str = str.trim();
+  // Try to extract month and day
+  const parts = str.split(/[\/\-\.]/);
+  if (parts.length < 2) return null;
+  const month = parseInt(parts[0], 10);
+  const day   = parseInt(parts[1], 10);
+  if (isNaN(month) || isNaN(day)) return null;
+  const year = parts[2] ? parseInt(parts[2], 10) : new Date().getFullYear();
+  const fullYear = year < 100 ? 2000 + year : year;
+  const d = new Date(fullYear, month - 1, day);
+  if (isNaN(d.getTime())) return null;
+  return d;
+}
+
+function formatDate(d) {
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${m}/${day}`;
+}
+
+// Called when Day 1 date input changes — cascade to all subsequent psychro rows
+function psychroDateChanged(val) {
+  const base = parseDateInput(val);
+  if (!base) return;
+  for (let d = 2; d <= psychroDays; d++) {
+    const el = document.getElementById(`p-${d}-date`);
+    if (el && !el._userEdited) {
+      const next = new Date(base);
+      next.setDate(base.getDate() + (d - 1));
+      el.value = formatDate(next);
+    }
+  }
+  // Also sync MC table Day 1 date if it exists and hasn't been user-edited
+  const mc1 = document.getElementById('m-1-date');
+  if (mc1 && !mc1._userEdited) {
+    mc1.value = val;
+    mcDateChanged(val);
+  }
+}
+
+// Called when Day 1 MC date changes
+function mcDateChanged(val) {
+  const base = parseDateInput(val);
+  if (!base) return;
+  for (let d = 2; d <= mcDays; d++) {
+    const el = document.getElementById(`m-${d}-date`);
+    if (el && !el._userEdited) {
+      const next = new Date(base);
+      next.setDate(base.getDate() + (d - 1));
+      el.value = formatDate(next);
+    }
+  }
+}
+
+// Auto-calculate dew points for a given row prefix ('p' = psychro, day number)
+function recalcDewPoints(day) {
+  // Exterior dew point
+  const extTempEl = document.getElementById(`p-${day}-ext-temp`);
+  const extRhEl   = document.getElementById(`p-${day}-ext-rh`);
+  const extDewEl  = document.getElementById(`p-${day}-ext-dew`);
+  if (extTempEl && extRhEl && extDewEl && !extDewEl._userEdited) {
+    const dp = calcDewPoint(parseFloat(extTempEl.value), parseFloat(extRhEl.value));
+    if (dp !== '') extDewEl.value = dp;
+  }
+  // Interior dew point
+  const intTempEl = document.getElementById(`p-${day}-int-temp`);
+  const intRhEl   = document.getElementById(`p-${day}-int-rh`);
+  const intDewEl  = document.getElementById(`p-${day}-int-dew`);
+  if (intTempEl && intRhEl && intDewEl && !intDewEl._userEdited) {
+    const dp = calcDewPoint(parseFloat(intTempEl.value), parseFloat(intRhEl.value));
+    if (dp !== '') intDewEl.value = dp;
+  }
+}
+
 function moistureRenderTables() {
   renderPsychroRows();
   renderMCRows();
@@ -2706,13 +2796,27 @@ function moistureRenderTables() {
 function renderPsychroRows() {
   const pt = document.getElementById('psychro-tbody');
   if (!pt) return;
-  // Keep existing data, only add new rows
   const existing = pt.querySelectorAll('tr').length;
   for (let d = existing + 1; d <= psychroDays; d++) {
-    const cols = ['date','ext-temp','ext-rh','ext-dew','int-temp','int-rh','int-dew'];
-    const cells = cols.map(c => `<td><input type="text" id="p-${d}-${c}" placeholder="—"></td>`).join('');
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td style="font-weight:700;color:var(--green);">${d}</td>${cells}`;
+    // Date cell — special handling for Day 1
+    const dateOnInput = d === 1
+      ? `oninput="this._userEdited=false; psychroDateChanged(this.value)"`
+      : `oninput="this._userEdited=true;"`;
+    const dewOnInput = `oninput="this._userEdited=true;"`;
+    const tempRhOnInput = (prefix) =>
+      `oninput="recalcDewPoints(${d});"`;
+
+    tr.innerHTML = `
+      <td style="font-weight:700;color:var(--green);">${d}</td>
+      <td><input type="text" id="p-${d}-date" placeholder="MM/DD" style="width:100%;border:none;background:transparent;font-size:13px;text-align:center;padding:2px;" ${dateOnInput}></td>
+      <td><input type="text" id="p-${d}-ext-temp" placeholder="—" style="width:100%;border:none;background:transparent;font-size:13px;text-align:center;padding:2px;" ${tempRhOnInput('ext')}></td>
+      <td><input type="text" id="p-${d}-ext-rh"   placeholder="—" style="width:100%;border:none;background:transparent;font-size:13px;text-align:center;padding:2px;" ${tempRhOnInput('ext')}></td>
+      <td><input type="text" id="p-${d}-ext-dew"  placeholder="auto" style="width:100%;border:none;background:transparent;font-size:13px;text-align:center;padding:2px;color:var(--green-dark);" ${dewOnInput}></td>
+      <td><input type="text" id="p-${d}-int-temp" placeholder="—" style="width:100%;border:none;background:transparent;font-size:13px;text-align:center;padding:2px;" ${tempRhOnInput('int')}></td>
+      <td><input type="text" id="p-${d}-int-rh"   placeholder="—" style="width:100%;border:none;background:transparent;font-size:13px;text-align:center;padding:2px;" ${tempRhOnInput('int')}></td>
+      <td><input type="text" id="p-${d}-int-dew"  placeholder="auto" style="width:100%;border:none;background:transparent;font-size:13px;text-align:center;padding:2px;color:var(--green-dark);" ${dewOnInput}></td>
+    `;
     pt.appendChild(tr);
   }
 }
@@ -2722,10 +2826,19 @@ function renderMCRows() {
   if (!mt) return;
   const existing = mt.querySelectorAll('tr').length;
   for (let d = existing + 1; d <= mcDays; d++) {
-    const cols = ['walls','floor','studs','ceil','cab','other'];
-    const cells = cols.map(c => `<td><input type="text" id="m-${d}-${c}" placeholder="—"></td>`).join('');
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td style="font-weight:700;color:var(--green);">${d}</td>${cells}`;
+    const dateOnInput = d === 1
+      ? `oninput="this._userEdited=false; mcDateChanged(this.value)"`
+      : `oninput="this._userEdited=true;"`;
+    const cols = ['walls','floor','studs','ceil','cab','other'];
+    const cells = cols.map(c =>
+      `<td><input type="text" id="m-${d}-${c}" placeholder="—" style="width:100%;border:none;background:transparent;font-size:13px;text-align:center;padding:2px;"></td>`
+    ).join('');
+    tr.innerHTML = `
+      <td style="font-weight:700;color:var(--green);">${d}</td>
+      <td><input type="text" id="m-${d}-date" placeholder="MM/DD" style="width:100%;border:none;background:transparent;font-size:13px;text-align:center;padding:2px;" ${dateOnInput}></td>
+      ${cells}
+    `;
     mt.appendChild(tr);
   }
 }
@@ -2735,10 +2848,15 @@ function moistureAddDay(table) {
     if (psychroDays >= MOISTURE_DAYS) return;
     psychroDays++;
     renderPsychroRows();
+    // Cascade dates into new row
+    const d1 = document.getElementById('p-1-date');
+    if (d1 && d1.value) psychroDateChanged(d1.value);
   } else {
     if (mcDays >= MOISTURE_DAYS) return;
     mcDays++;
     renderMCRows();
+    const m1 = document.getElementById('m-1-date');
+    if (m1 && m1.value) mcDateChanged(m1.value);
   }
 }
 
@@ -2754,7 +2872,7 @@ function generateMoisturePDF() {
   // Header bar with real logo
   doc.setFillColor(28, 28, 26); doc.rect(0, 0, 792, 50, 'F');
   doc.setFillColor(...green); doc.rect(0, 47, 792, 3, 'F');
-  try { doc.addImage(QLAB_LOGO_B64, 'PNG', ml, 6, 60, 24); } catch(e) {
+  try { doc.addImage(QLAB_LOGO_B64, 'PNG', ml, 6, 56, 42); } catch(e) {
     doc.setFontSize(16); doc.setTextColor(255,255,255); doc.setFont('helvetica','bold');
     doc.text('Qlab Solutions', ml, 30);
   }
@@ -2817,8 +2935,8 @@ function generateMoisturePDF() {
   doc.setFontSize(10); doc.setTextColor(255,255,255); doc.setFont('helvetica','bold');
   doc.text('Interior Moisture Content (MC)', ml+10, y+13); y += 18;
 
-  const mHdrs = ['Day','MC Walls','MC Floor','MC Studs','MC Ceiling','MC Cabinets','MC Other'];
-  const mCols = ['walls','floor','studs','ceil','cab','other'];
+  const mHdrs = ['Day','Date','MC Walls','MC Floor','MC Studs','MC Ceiling','MC Cabinets','MC Other'];
+  const mCols = ['date','walls','floor','studs','ceil','cab','other'];
   const mColW = lw / mHdrs.length;
 
   doc.setFillColor(230,230,230); doc.rect(ml, y, lw, 16, 'F');
