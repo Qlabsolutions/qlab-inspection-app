@@ -3074,7 +3074,9 @@ function generateMoisturePDF() {
     y += 16;
   }
 
-  doc.save('Qlab-Daily-Moisture-Readings.pdf');
+  const moistClient = (document.getElementById('moist-client').value || 'Client').replace(/\s+/g,'-');
+  const moistDate = new Date().toISOString().slice(0,10);
+  doc.save(`Qlab-Daily-Moisture-${moistClient}-${moistDate}.pdf`);
 }
 </script>
 </body>
