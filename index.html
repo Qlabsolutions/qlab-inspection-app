@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Qlab">
   <meta name="theme-color" content="#1c1c1a">
-<title>Qlab Solutions</title>
+<title>Qlab Solutions — Property Inspection</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
   :root {
@@ -462,6 +462,12 @@
     flex: 1;
     outline: none;
     font-family: inherit;
+    border-bottom: 1.5px solid rgba(45, 185, 122, 0.55); /* brand-green hint that it's editable */
+    padding: 3px 2px;
+  }
+  .room-name-input::placeholder {
+    color: rgba(255, 255, 255, 0.6); /* visible on dark card-header bg */
+    font-weight: 500;
   }
   .room-del { color: var(--red); font-size: 18px; cursor: pointer; padding: 0 4px; }
 
@@ -1314,16 +1320,42 @@ function getChips(groupId) {
 // ─────────────────────────────────────────
 // PHOTOS
 // ─────────────────────────────────────────
+// Downscale on upload so a 40-photo inspection doesn't OOM mobile Safari.
+// Max 1600px on the long edge, JPEG quality 0.82 — stays well under 400KB
+// per photo while still looking sharp when embedded in the PDF.
+function downscaleImage(dataURL, maxDim, quality) {
+  maxDim = maxDim || 1600;
+  quality = quality || 0.82;
+  return new Promise(function(resolve) {
+    const img = new Image();
+    img.onload = function() {
+      let w = img.naturalWidth, h = img.naturalHeight;
+      if (w > maxDim || h > maxDim) {
+        if (w >= h) { h = Math.round(h * maxDim / w); w = maxDim; }
+        else        { w = Math.round(w * maxDim / h); h = maxDim; }
+      }
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      try { resolve(c.toDataURL('image/jpeg', quality)); }
+      catch(e) { resolve(dataURL); } // fallback on toDataURL failure
+    };
+    img.onerror = function() { resolve(dataURL); };
+    img.src = dataURL;
+  });
+}
+
 function addPhotos(section, input) {
   if (!photos[section]) photos[section] = [];
   const grid = document.getElementById('photos-' + section);
   [...input.files].forEach(file => {
     const reader = new FileReader();
-    reader.onload = e => {
-      photos[section].push(e.target.result);
+    reader.onload = async (e) => {
+      const out = await downscaleImage(e.target.result);
+      photos[section].push(out);
       const img = document.createElement('img');
       img.className = 'photo-thumb';
-      img.src = e.target.result;
+      img.src = out;
       grid.appendChild(img);
     };
     reader.readAsDataURL(file);
@@ -1336,90 +1368,123 @@ function addPhotos(section, input) {
 // ─────────────────────────────────────────
 function addRoom() {
   const id = roomCounter++;
-  rooms.push({ id, name: '', ceiling: [], walls: [], floor: [] });
+  rooms.push({
+    id, name: '',
+    ceilMat: [], ceilDmg: [], wallMat: [], wallDmg: [], floorType: [], floorDmg: []
+  });
   renderRooms();
+}
+
+// Chip toggle for rooms — stores selection on the room object (keyed by
+// stable room.id) so state survives re-renders on addRoom/removeRoom.
+function roomChipToggle(roomId, field, el) {
+  const room = rooms.find(r => r.id === roomId);
+  if (!room) return;
+  const val = el.textContent.replace('ⓘ', '').trim();
+  if (!Array.isArray(room[field])) room[field] = [];
+  const arr = room[field];
+  const i = arr.indexOf(val);
+  if (i >= 0) { arr.splice(i, 1); el.classList.remove('active'); }
+  else        { arr.push(val);    el.classList.add('active'); }
 }
 
 function renderRooms() {
   const container = document.getElementById('roomsContainer');
   container.innerHTML = '';
-  rooms.forEach((room, idx) => {
+  rooms.forEach((room) => {
+    const rid = room.id;
     const block = document.createElement('div');
     block.className = 'card';
+    const chip = (field, label) =>
+      `<div class="chip" onclick="roomChipToggle(${rid},'${field}',this)">${label}</div>`;
     block.innerHTML = `
       <div class="card-header" style="background:var(--gray-dark);">
         <span class="section-icon">🚪</span>
-        <input class="room-name-input" value="${room.name}" placeholder="Room name (e.g. Living room, Bedroom 1)" 
-          oninput="rooms[${idx}].name=this.value" style="color:white; font-size:14px;">
-        <span class="room-del" onclick="removeRoom(${idx})">✕</span>
+        <input class="room-name-input" value="${(room.name || '').replace(/"/g,'&quot;')}" placeholder="Room name (e.g. Living room, Bedroom 1)"
+          oninput="(rooms.find(r=>r.id===${rid})||{}).name=this.value" style="color:white; font-size:14px;">
+        <span class="room-del" onclick="removeRoom(${rid})">✕</span>
       </div>
       <div class="card-body">
         <div class="form-row">
           <label class="form-label">Ceiling material</label>
-          <div class="chips-wrap" id="room-ceilmat-${idx}">
-            <div class="chip" onclick="chipToggle('room-ceilmat-${idx}',this)">Drywall</div>
-            <div class="chip" onclick="chipToggle('room-ceilmat-${idx}',this)">Plaster</div>
+          <div class="chips-wrap" id="room-ceilmat-${rid}">
+            ${chip('ceilMat','Drywall')}${chip('ceilMat','Plaster')}
           </div>
         </div>
         <div class="form-row">
           <label class="form-label">Ceiling damage</label>
-          <div class="chips-wrap" id="room-ceil-${idx}">
-            <div class="chip" onclick="chipToggle('room-ceil-${idx}',this)">Water stain</div>
-            <div class="chip" onclick="chipToggle('room-ceil-${idx}',this)">Wet material</div>
-            <div class="chip" onclick="chipToggle('room-ceil-${idx}',this)">Structural damage</div>
-            <div class="chip" onclick="chipToggle('room-ceil-${idx}',this)">Mold</div>
-            <div class="chip" onclick="chipToggle('room-ceil-${idx}',this)">None</div>
+          <div class="chips-wrap" id="room-ceil-${rid}">
+            ${chip('ceilDmg','Water stain')}${chip('ceilDmg','Wet material')}${chip('ceilDmg','Structural damage')}${chip('ceilDmg','Mold')}${chip('ceilDmg','None')}
           </div>
         </div>
         <div class="form-row">
           <label class="form-label">Wall material</label>
-          <div class="chips-wrap" id="room-wallmat-${idx}">
-            <div class="chip" onclick="chipToggle('room-wallmat-${idx}',this)">Drywall</div>
-            <div class="chip" onclick="chipToggle('room-wallmat-${idx}',this)">Plaster</div>
+          <div class="chips-wrap" id="room-wallmat-${rid}">
+            ${chip('wallMat','Drywall')}${chip('wallMat','Plaster')}
           </div>
         </div>
         <div class="form-row">
           <label class="form-label">Wall damage</label>
-          <div class="chips-wrap" id="room-wall-${idx}">
-            <div class="chip" onclick="chipToggle('room-wall-${idx}',this)">Water stain</div>
-            <div class="chip" onclick="chipToggle('room-wall-${idx}',this)">Wet material</div>
-            <div class="chip" onclick="chipToggle('room-wall-${idx}',this)">Structural damage</div>
-            <div class="chip" onclick="chipToggle('room-wall-${idx}',this)">Mold</div>
-            <div class="chip" onclick="chipToggle('room-wall-${idx}',this)">None</div>
+          <div class="chips-wrap" id="room-wall-${rid}">
+            ${chip('wallDmg','Water stain')}${chip('wallDmg','Wet material')}${chip('wallDmg','Structural damage')}${chip('wallDmg','Mold')}${chip('wallDmg','None')}
           </div>
         </div>
         <div class="form-row">
           <label class="form-label">Floor type</label>
-          <div class="chips-wrap" id="room-floortype-${idx}">
-            <div class="chip" onclick="chipToggle('room-floortype-${idx}',this)">Tile</div>
-            <div class="chip" onclick="chipToggle('room-floortype-${idx}',this)">Laminate</div>
-            <div class="chip" onclick="chipToggle('room-floortype-${idx}',this)">Wood</div>
-            <div class="chip" onclick="chipToggle('room-floortype-${idx}',this)">Carpet</div>
+          <div class="chips-wrap" id="room-floortype-${rid}">
+            ${chip('floorType','Tile')}${chip('floorType','Laminate')}${chip('floorType','Wood')}${chip('floorType','Carpet')}
           </div>
         </div>
         <div class="form-row">
           <label class="form-label">Floor damage</label>
-          <div class="chips-wrap" id="room-floor-${idx}">
-            <div class="chip" onclick="chipToggle('room-floor-${idx}',this)">Water stain</div>
-            <div class="chip" onclick="chipToggle('room-floor-${idx}',this)">Wet material</div>
-            <div class="chip" onclick="chipToggle('room-floor-${idx}',this)">Warping</div>
-            <div class="chip" onclick="chipToggle('room-floor-${idx}',this)">Mold</div>
-            <div class="chip" onclick="chipToggle('room-floor-${idx}',this)">None</div>
+          <div class="chips-wrap" id="room-floor-${rid}">
+            ${chip('floorDmg','Water stain')}${chip('floorDmg','Wet material')}${chip('floorDmg','Warping')}${chip('floorDmg','Mold')}${chip('floorDmg','None')}
           </div>
         </div>
         <div class="photo-section">
           <div class="photo-label">Photos</div>
-          <div class="photo-grid" id="photos-room-${idx}"></div>
-          <label class="photo-add-btn" for="file-room-${idx}"><span class="plus">+</span>Photo</label>
-          <input class="photo-input" type="file" id="file-room-${idx}" accept="image/*" capture="environment" multiple onchange="addPhotos('room-${idx}',this)">
+          <div class="photo-grid" id="photos-room-${rid}"></div>
+          <label class="photo-add-btn" for="file-room-${rid}"><span class="plus">+</span>Photo</label>
+          <input class="photo-input" type="file" id="file-room-${rid}" accept="image/*" capture="environment" multiple onchange="addPhotos('room-${rid}',this)">
         </div>
       </div>`;
     container.appendChild(block);
+
+    // Restore chip .active state from room data (re-render wipes DOM)
+    const chipGroups = {
+      ceilMat:   `#room-ceilmat-${rid} .chip`,
+      ceilDmg:   `#room-ceil-${rid} .chip`,
+      wallMat:   `#room-wallmat-${rid} .chip`,
+      wallDmg:   `#room-wall-${rid} .chip`,
+      floorType: `#room-floortype-${rid} .chip`,
+      floorDmg:  `#room-floor-${rid} .chip`,
+    };
+    Object.keys(chipGroups).forEach(field => {
+      const selected = room[field] || [];
+      block.querySelectorAll(chipGroups[field]).forEach(c => {
+        const label = c.textContent.replace('ⓘ','').trim();
+        if (selected.includes(label)) c.classList.add('active');
+      });
+    });
+
+    // Restore photo thumbnails from memory (re-render clears the grid)
+    const grid = block.querySelector(`#photos-room-${rid}`);
+    const existing = photos['room-' + rid];
+    if (grid && Array.isArray(existing)) {
+      existing.forEach(src => {
+        const img = document.createElement('img');
+        img.className = 'photo-thumb';
+        img.src = src;
+        grid.appendChild(img);
+      });
+    }
   });
 }
 
-function removeRoom(idx) {
-  rooms.splice(idx, 1);
+function removeRoom(roomId) {
+  const i = rooms.findIndex(r => r.id === roomId);
+  if (i >= 0) rooms.splice(i, 1);
+  delete photos['room-' + roomId]; // prevent orphaned photo keys leaking into the PDF
   renderRooms();
 }
 
@@ -1451,17 +1516,42 @@ function removeContent(idx) {
 // ─────────────────────────────────────────
 let sigInitialized = false;
 
+// Resize canvas to current CSS-rendered size while preserving any existing
+// signature. Called on first show (initSig) and on window resize / rotate.
+function resizeSigCanvas() {
+  const canvas = document.getElementById('sig-canvas');
+  if (!canvas) return;
+  const targetW = canvas.offsetWidth  || 600;
+  const targetH = canvas.offsetHeight || 150;
+  if (canvas.width === targetW && canvas.height === targetH) return;
+
+  // Snapshot existing drawing (if any) before the resize wipes it
+  let snapshot = null;
+  if (canvas.width && canvas.height) {
+    try { snapshot = canvas.toDataURL('image/png'); } catch(e) {}
+  }
+  canvas.width = targetW;
+  canvas.height = targetH;
+
+  // Canvas resize wipes stroke styles — restore them
+  const ctx = canvas.getContext('2d');
+  ctx.strokeStyle = '#2c2c2a';
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  sigCtx = ctx;
+
+  if (snapshot) {
+    const img = new Image();
+    img.onload = () => ctx.drawImage(img, 0, 0, targetW, targetH);
+    img.src = snapshot;
+  }
+}
+
 function initSig() {
   if (sigInitialized) return;
   const canvas = document.getElementById('sig-canvas');
   if (!canvas) return;
-  // Set canvas pixel width to its actual rendered width
-  canvas.width = canvas.offsetWidth || 600;
-  canvas.height = canvas.offsetHeight || 150;
-  sigCtx = canvas.getContext('2d');
-  sigCtx.strokeStyle = '#2c2c2a';
-  sigCtx.lineWidth = 2.5;
-  sigCtx.lineCap = 'round';
+  resizeSigCanvas();
 
   const getPos = (e) => {
     const r = canvas.getBoundingClientRect();
@@ -1478,6 +1568,16 @@ function initSig() {
   canvas.addEventListener('touchstart', e => { e.preventDefault(); sigDrawing = true; sigLast = getPos(e); }, { passive: false });
   canvas.addEventListener('touchmove',  e => { e.preventDefault(); if (!sigDrawing) return; draw(canvas, getPos(e)); }, { passive: false });
   canvas.addEventListener('touchend',   () => sigDrawing = false);
+
+  // Debounced resize handler — covers phone rotation + window resize
+  let sigResizeTimer = null;
+  const onResize = () => {
+    clearTimeout(sigResizeTimer);
+    sigResizeTimer = setTimeout(resizeSigCanvas, 150);
+  };
+  window.addEventListener('resize', onResize);
+  window.addEventListener('orientationchange', onResize);
+
   sigInitialized = true;
 }
 
@@ -1561,7 +1661,7 @@ async function generatePDF() {
     }
 
     function sectionHeader(title, emoji = '') {
-      checkY(14);
+      checkY(18);
       // Black background
       doc.setFillColor(28, 28, 26);
       doc.roundedRect(margin, y, W - margin * 2, 10, 2, 2, 'F');
@@ -1570,7 +1670,9 @@ async function generatePDF() {
       doc.rect(margin, y, 3, 10, 'F');
       doc.setFontSize(9); doc.setTextColor(255, 255, 255); doc.setFont(undefined, 'bold');
       doc.text(title.toUpperCase(), margin + 8, y + 7);
-      y += 14;
+      // Gap of 8mm so the Yes/No badge on the first fieldRow (which draws
+      // from y-5 to y+2) doesn't clip into the bottom of the header bar.
+      y += 18;
     }
 
     function fieldRow(label, value, badgeType = null) {
@@ -1652,7 +1754,9 @@ async function generatePDF() {
     y += 30;
 
     // ─── SAFETY HAZARDS ───
-    newPage(); y = 16;
+    // newPage() already sets y = 28 (below the 21.5mm continuation header
+    // bar); don't override it or the section header draws over the logo.
+    newPage();
     sectionHeader('Safety Hazards', '⚠');
     const hazardFields = [
       ['Are there any hazards?', 'hazards'],
@@ -1711,20 +1815,20 @@ async function generatePDF() {
 
     // ─── WATER / INTERIOR ───
     checkY(20); sectionHeader('Water Damage / Interior', '💧');
-    rooms.forEach((room, idx) => {
+    rooms.forEach((room) => {
       checkY(12);
       doc.setFontSize(10); doc.setFont(undefined, 'bold'); doc.setTextColor(...dark);
       doc.text('Room: ' + (room.name || 'Unnamed room'), margin, y); y += 7;
-      const ceilMat = getChips('room-ceilmat-'+idx).join(', ');
+      const ceilMat = (room.ceilMat || []).join(', ');
       if (ceilMat) fieldRow('Ceiling material', ceilMat);
-      fieldRow('Ceiling damage', getChips('room-ceil-'+idx).join(', ') || 'None');
-      const wallMat = getChips('room-wallmat-'+idx).join(', ');
+      fieldRow('Ceiling damage', (room.ceilDmg || []).join(', ') || 'None');
+      const wallMat = (room.wallMat || []).join(', ');
       if (wallMat) fieldRow('Wall material', wallMat);
-      fieldRow('Wall damage', getChips('room-wall-'+idx).join(', ') || 'None');
-      const floorType = getChips('room-floortype-'+idx).join(', ');
+      fieldRow('Wall damage', (room.wallDmg || []).join(', ') || 'None');
+      const floorType = (room.floorType || []).join(', ');
       if (floorType) fieldRow('Floor type', floorType);
-      fieldRow('Floor damage', getChips('room-floor-'+idx).join(', ') || 'None');
-      addPhotoRow('room-' + idx, 'Room photos');
+      fieldRow('Floor damage', (room.floorDmg || []).join(', ') || 'None');
+      addPhotoRow('room-' + room.id, 'Room photos');
     });
 
     fieldRow('Visible attic roof damage', '', toggles['atticRoofDamage']);
@@ -1793,7 +1897,7 @@ async function generatePDF() {
     // ─── PHOTO APPENDIX ───
     const allSections = Object.entries(photos).filter(([, arr]) => arr.length > 0);
     if (allSections.length > 0) {
-      newPage(); y = 16;
+      newPage();
       sectionHeader('Photo Appendix', '📷');
       for (const [key, arr] of allSections) {
         const lbl = key.replace('room-', 'Room ').replace(/-/g, ' ');
@@ -1812,14 +1916,14 @@ async function generatePDF() {
       }
     }
 
-    // Add footer + page numbers on every page
+    // Add footer + page numbers on every page (compact, no overlap)
     const pageCount = doc.internal.getNumberOfPages();
     for (let i = 1; i <= pageCount; i++) {
       doc.setPage(i);
-      doc.setFontSize(8); doc.setTextColor(...mid);
-      doc.text('Qlab Solutions — Property Damage Inspection', margin, 288);
-      doc.text(`Page ${i} of ${pageCount}`, W / 2, 288, { align: 'center' });
-      doc.text('qlabsolutionsusa.com  |  (786) 746-7599  |  admin@qlabsolutions.co', W - margin, 288, { align: 'right' });
+      doc.setFontSize(8); doc.setFont(undefined, 'normal'); doc.setTextColor(...mid);
+      doc.text('Qlab Solutions', margin, 288);
+      doc.text('qlabsolutionsusa.com  |  (786) 746-7599  |  admin@qlabsolutions.co', W / 2, 288, { align: 'center' });
+      doc.text(`Page ${i} of ${pageCount}`, W - margin, 288, { align: 'right' });
     }
 
     // Save to Supabase if configured
@@ -1913,6 +2017,33 @@ async function saveToSupabase() {
       <div class="form-row"><label class="form-label required">Job Address</label><input class="form-input" id="sow-address" placeholder="Street, City, State, ZIP" type="text"></div>
       <div class="form-row"><label class="form-label">Job Number</label><input class="form-input" id="sow-job" placeholder="Auto-generated" type="text" readonly style="background:#f5f5f5;color:var(--gray-mid);"></div>
       <div class="form-row"><label class="form-label">Mitigation Date</label><input class="form-input" id="sow-mitig-date" type="date"></div>
+      <div class="form-row">
+        <label class="form-label">Type of Loss</label>
+        <div class="form-select-wrap">
+          <select class="form-select" id="sow-type-of-loss">
+            <option value="">— Select —</option>
+            <option>Water Damage</option>
+            <option>Fire Damage</option>
+            <option>Mold Remediation</option>
+            <option>Storm / Wind</option>
+            <option>Roof Leak</option>
+            <option>Sewage Backup</option>
+            <option>Other</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Water Category (IICRC S500)</label>
+        <div class="form-select-wrap">
+          <select class="form-select" id="sow-water-category">
+            <option value="">— Select —</option>
+            <option>Category 1 — Clean Water</option>
+            <option>Category 2 — Gray Water</option>
+            <option>Category 3 — Black Water</option>
+            <option>N/A (non-water loss)</option>
+          </select>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -2359,9 +2490,6 @@ const SOW_HOUSE_TASKS = [
   { label:'Supervisor', unit:'hrs', tip:'Hours a certified supervisor is on-site overseeing the work, quality control, and documentation.' },
   { label:'Debris Hauling Type', unit:'', type:'select', opts:['Contractor black bags','Dumpster','Other'], tip:'Method used to remove demolished or contaminated materials from the property.' },
   { label:'Debris Hauling (# of Pieces)', unit:'#', tip:'Number of contractor bags, loads, or units of debris removed from the site.' },
-  { label:'Thermal Imaging', unit:'#', tip:'Infrared camera inspections to detect hidden moisture behind walls, ceilings, or floors not visible to the naked eye.' },
-  { label:'Fogging', unit:'', tip:'Application of antimicrobial or deodorizing agent via ULV fogger to treat airborne contaminants or odors throughout the space.' },
-  { label:'Type of Loss', unit:'', type:'select', opts:['Water Damage','Fire Damage','Mold Remediation','Storm / Wind','Roof Leak','Sewage Backup','Other'], tip:'Primary cause of the loss event — required for insurance documentation and determines the applicable IICRC standard (S500 water, S520 mold, S700 fire).' },
 ];
 
 const SOW_ROOM_TASKS = [
@@ -2387,11 +2515,6 @@ const SOW_ROOM_TASKS = [
   { label:"Room's Height (h)", unit:'ft', tip:'Ceiling height in feet — needed to calculate cubic footage for correct air scrubber and hydroxyl generator sizing per IICRC S500.' },
   { label:'Drill Holes (#)', unit:'#', tip:'Number of holes drilled into walls (typically 1-2 inches at baseboard level) to inject airflow into wall cavities for intra-wall drying per IICRC S500.' },
   { label:'Clean with HEPA Vacuum', unit:'SFT', tip:'Square footage vacuumed with a HEPA-filter vacuum after demolition to capture fine debris, dust, and potential mold spores before antimicrobial treatment.' },
-  { label:'Apply Antimicrobial', unit:'SFT', tip:'Square footage treated with an EPA-registered antimicrobial agent to inhibit microbial growth on exposed structural surfaces after demolition.' },
-  { label:'Apply Bleach/Peroxide', unit:'SFT', tip:'Square footage treated with bleach or hydrogen peroxide — used for Category 3 (black water) losses or visible mold remediation per IICRC S520.' },
-  { label:'Seal with Primer', unit:'SFT', tip:'Square footage sealed with an encapsulating primer after remediation — locks in residual odor or microbial treatment before reconstruction begins.' },
-  { label:'Containment', unit:'SFT', tip:'Square footage of poly sheeting barrier erected to isolate the work area, control dust and spores, and maintain negative air pressure during remediation.' },
-  { label:'Containment Poles (#)', unit:'#', tip:'Number of spring-loaded or telescoping poles used to support the poly containment barrier without fastening to walls.' },
   { label:'Zippers (#)', unit:'#', tip:'Number of zippered access flaps installed in the containment barrier so workers can enter and exit without breaking the airtight seal.' },
   { label:'Dehumidifiers (Amount)', unit:'#', tip:'Number of LGR (Low Grain Refrigerant) dehumidifiers deployed. Sized per IICRC S500 psychrometric calculations — typically 1 unit per 500-800 sq ft of affected area.' },
   { label:'Dehumidifiers (# of Days)', unit:'days', tip:'Number of days dehumidifiers remain on-site. Standard drying cycle is 3-5 days; extended if moisture readings remain above the IICRC dry standard for that material.' },
@@ -2401,13 +2524,10 @@ const SOW_ROOM_TASKS = [
   { label:'Air Movers (# of Days)', unit:'days', tip:'Number of days air movers run. STOP air movers immediately if mold is confirmed — never blow air across active mold growth per IICRC S520.' },
   { label:'Wall Cavity Injector (Amount)', unit:'#', tip:'Number of Injectidry or similar wall-panel drying systems used to force conditioned air through drilled holes into wall cavities for intra-wall drying.' },
   { label:'Wall Cavity Injector (# of Days)', unit:'days', tip:'Number of days wall cavity injection systems run. Typically 2-5 days until cavity moisture readings reach dry standard.' },
-  { label:'Titan Hydroxyl (Amount)', unit:'#', tip:'Number of hydroxyl radical generators deployed. Hydroxyls destroy VOCs, odors, and contaminants at the molecular level. Safe to operate with occupants present — unlike ozone.' },
-  { label:'Titan Hydroxyl (# of Days)', unit:'days', tip:'Number of days hydroxyl generators run. Used for odor elimination after losses involving sewage, smoke, or mold.' },
   { label:'Equipment Decontamination', unit:'', tip:'Cleaning and disinfecting all drying equipment before removal from a Category 2 or 3 loss site to prevent cross-contamination to other job sites.' },
   { label:'Replace HEPA Filter', unit:'#', tip:'Number of HEPA main filters replaced in air scrubbers. Filters must be changed when loaded or at end of a mold/sewage job per IICRC protocols.' },
   { label:'Replace Pre-Filter', unit:'#', tip:'Number of pre-filters (coarse foam or panel filters) replaced. Pre-filters protect the HEPA filter and should be changed every 1-2 days on heavy demolition jobs.' },
   { label:'Replace HEPA Vacuum Filter', unit:'#', tip:'Number of HEPA vacuum filters replaced — load quickly during post-demo cleanup and must be disposed of sealed in a bag.' },
-  { label:'Plastic Cover', unit:'SFT', tip:'Square footage of 6-mil poly sheeting used for floor protection, containment walls, or covering contents and furniture during demolition.' },
   { label:'Gloves (# of Pairs)', unit:'#', tip:'Pairs of nitrile or rubber gloves used by technicians. Required PPE for Category 2/3 water losses and all mold work per IICRC S520.' },
   { label:'# of Masks', unit:'#', tip:'N95 or P100 respirator masks used by technicians. Required during demolition, HEPA vacuuming, and all mold remediation per IICRC S520.' },
   { label:'# of Goggles', unit:'#', tip:'Safety goggles or face shields worn during demolition, chemical application, and mold work to protect eyes from debris and splatter.' },
@@ -2494,14 +2614,12 @@ const SOW_FIRE_TASKS = [
 
 const SOW_TARP_TASKS = [
   { label:'Tarp Material', unit:'', type:'select', opts:['Blue poly tarp','Heavy-duty poly tarp','Woven poly tarp','Canvas tarp','Other'], tip:'Type of tarp material used. Heavy-duty poly tarps are standard for roof protection — rated by mil thickness. Blue tarps are lightweight; silver/brown woven poly are more durable for extended coverage.' },
-  { label:'Tarp Size', unit:'', type:'select', opts:["6'×8'",'8\'×10\'','10\'×12\'','12\'×16\'','16\'×20\'','20\'×30\'','Custom'], tip:'Dimensions of tarp installed over the damaged roof area. Must overlap undamaged surfaces by at least 4 feet on all sides per IBHS roof tarp standards.' },
-  { label:'Number of Tarps', unit:'#', tip:'Total number of tarps installed to cover the full area of damage.' },
+  { label:'Tarp Sizes & Quantities', unit:'', tip:"Free-form list of every tarp installed with its size, e.g. \"2× 10'×12', 1× 16'×20'\". Use this when mixing sizes on the same roof. Must overlap undamaged surfaces by at least 4 feet on all sides per IBHS tarp standards." },
   { label:'Tarp Securement Method', unit:'', type:'select', opts:['Sandbags','Cap nails & battens','Screw-down battens','Rope / bungee','Combination'], tip:'Method used to secure the tarp edges. Sandbags prevent penetration damage to the roof. Battens are more permanent and wind-resistant for extended coverage.' },
   { label:'Sandbags (#)', unit:'#', tip:'Number of sandbags used to weight down tarp edges and prevent wind uplift. Place every 2–3 feet along all exposed edges.' },
   { label:'Wood Battens / Boards (LF)', unit:'LF', tip:'Linear feet of 1×4 or 2×4 lumber used as battens screwed through the tarp into the roof deck to secure it against wind.' },
   { label:'Debris Removal Before Tarp', unit:'', type:'select', opts:['Yes','No'], tip:'Whether fallen debris (branches, shingles, damaged materials) was cleared from the roof surface before tarp installation.' },
   { label:'Technician Hours on Roof', unit:'hrs', tip:'Total labor hours spent on the roof installing the tarp — includes setup, placement, and securement.' },
-  { label:'Ladder / Lift Required', unit:'', type:'select', opts:['Ladder only','Scissor lift','Boom lift','Not required'], tip:'Access equipment used to safely reach the roof area for tarp installation.' },
   { label:'Technician Drive Time', unit:'hrs' },
   { label:'Supervisor', unit:'hrs' },
   { label:'Photos Taken', unit:'', type:'select', opts:['Yes','No'], tip:'Document the damage before and after tarp installation — required for insurance claims.' },
@@ -2509,9 +2627,6 @@ const SOW_TARP_TASKS = [
 ];
 
 const SOW_MOLD_TASKS = [
-  { label:'Mold Assessment / Inspection', unit:'', tip:'Visual inspection and moisture mapping to identify all affected areas before remediation begins. Required per IICRC S520 — a written protocol should be produced by a licensed assessor.' },
-  { label:'Air Sampling (#)', unit:'#', tip:'Number of air cassette samples collected to measure airborne spore counts. Compare indoor samples to outdoor control sample per IICRC S520 protocol.' },
-  { label:'Surface Sampling (#)', unit:'#', tip:'Number of swab or tape-lift samples taken from suspect mold surfaces to identify species and confirm presence.' },
   { label:'Containment', unit:'SFT', tip:'Square footage of critical or full containment barrier erected using poly sheeting. Negative air pressure must be maintained throughout the remediation per IICRC S520.' },
   { label:'Containment Poles (#)', unit:'#', tip:'Number of spring-loaded poles used to support poly containment without fastening to walls.' },
   { label:'Zippers (#)', unit:'#', tip:'Number of zippered entry flaps installed in containment to allow access without breaking the airtight seal.' },
@@ -2533,7 +2648,6 @@ const SOW_MOLD_TASKS = [
   { label:'Dehumidifiers (# of Days)', unit:'days' },
   { label:'Equipment Decontamination', unit:'', tip:'Cleaning and disinfecting all equipment before removal from the mold-affected area to prevent cross-contamination of other job sites or vehicles.' },
   { label:'Debris Disposal (Bags)', unit:'#', tip:'Number of sealed poly bags used to bag and remove mold-contaminated debris. All bags must be sealed before exiting containment.' },
-  { label:'Clearance Testing / Post-Remediation Verification', unit:'', tip:'Air and surface samples taken after remediation to confirm spore counts are within acceptable limits before containment is removed. Required by IICRC S520 — typically performed by a third-party assessor.' },
   { label:'Gloves (# of Pairs)', unit:'#', tip:'Nitrile or rubber gloves required throughout mold remediation per IICRC S520.' },
   { label:'# of Masks', unit:'#', tip:'N95 minimum — P100 respirator recommended for heavy mold growth. Required throughout all mold work per IICRC S520.' },
   { label:'# of Goggles', unit:'#' },
@@ -2542,9 +2656,38 @@ const SOW_MOLD_TASKS = [
   { label:'Miscellaneous', unit:'' },
 ];
 
+// Controlled Mitigation — used when mold or microbial contamination is suspected
+// but not yet confirmed by testing. Establish containment + HEPA filtration +
+// dehumidification to stabilize the space. Critically: NO air movers and NO
+// positive airflow — never disperse potential spores per IICRC S520.
+const SOW_CONTROLLED_TASKS = [
+  { label:'Containment', unit:'SFT', tip:'Poly sheeting barrier erected around the suspected area to isolate it. Maintain negative air pressure inside containment. Do NOT introduce any air movement that could disperse spores or contaminated particulates per IICRC S520.' },
+  { label:'Containment Poles (#)', unit:'#', tip:'Number of spring-loaded / telescoping poles used to support the containment barrier without fastening into walls.' },
+  { label:'Zippers (#)', unit:'#', tip:'Number of zippered access flaps installed in the containment so technicians can enter and exit without breaking the airtight seal.' },
+  { label:'Air Scrubbers (Amount)', unit:'#', tip:'HEPA negative-air machines. Scrubbers PULL air through a HEPA filter — they do not blow air into the space, which is why they are the only approved airflow device when mold or Category 2/3 water is suspected per IICRC S520.' },
+  { label:'Air Scrubbers (# of Days)', unit:'days' },
+  { label:'Dehumidifiers (Amount)', unit:'#', tip:'LGR dehumidifiers to reduce ambient RH without generating airflow across the suspected contamination. Maintain below 50% RH throughout the hold period. Safe for controlled mitigation — they do not push air across surfaces.' },
+  { label:'Dehumidifiers (# of Days)', unit:'days' },
+  { label:'HEPA Vacuum — Surfaces', unit:'SFT', tip:'Square footage HEPA vacuumed to capture loose debris and potential spores. Do not use a standard shop vac — fine spores pass straight through.' },
+  { label:'Replace HEPA Filter (Scrubber)', unit:'#' },
+  { label:'Replace Pre-Filter', unit:'#' },
+  { label:'Replace HEPA Vacuum Filter', unit:'#' },
+  { label:'Equipment Decontamination', unit:'', tip:'Clean and disinfect all equipment before removing it from the controlled area to prevent cross-contamination of other job sites or vehicles.' },
+  { label:'Gloves (# of Pairs)', unit:'#', tip:'Nitrile or rubber gloves required when entering a controlled-mitigation containment per IICRC S520.' },
+  { label:'# of Masks', unit:'#', tip:'N95 minimum. P100 recommended if visible mold is present. Required when entering the containment.' },
+  { label:'# of Goggles', unit:'#' },
+  { label:'# of Tyvek Suits', unit:'#', tip:'Full-body disposable coveralls when entering the containment. Prevents tracking potential contamination out of the suspected area.' },
+  { label:'Content Manipulation', unit:'', tip:'Moving furniture or contents out of the suspected area to protect them from potential cross-contamination before assessment or remediation begins.' },
+  { label:"Room's Length (L)", unit:'ft' },
+  { label:"Room's Width (W)", unit:'ft' },
+  { label:"Room's Height (h)", unit:'ft', tip:'Ceiling height in feet — needed to calculate cubic footage for correct air scrubber sizing per IICRC S520.' },
+  { label:'Miscellaneous', unit:'' },
+];
+
 const SOW_SERVICE_TASKS = {
   tarp:        SOW_TARP_TASKS,
   mitigation:  SOW_ROOM_TASKS,
+  controlled:  SOW_CONTROLLED_TASKS,
   mold:        SOW_MOLD_TASKS,
   fire:        SOW_FIRE_TASKS,
 };
@@ -2552,6 +2695,7 @@ const SOW_SERVICE_TASKS = {
 const SERVICE_LABELS = {
   tarp:        'Roof Tarp',
   mitigation:  'Water Mitigation',
+  controlled:  'Controlled Mitigation',
   mold:        'Mold Remediation',
   fire:        'Fire Restoration',
 };
@@ -2726,15 +2870,16 @@ function generateScopeOfWorkPDF() {
     doc.text(safeText(address) || ' ', ml + 5, y + 19);
     y += 30;
 
-    var typeOfLossIdx = SOW_HOUSE_TASKS.findIndex(function(t) { return t.label === 'Type of Loss'; });
-    var typeOfLossEl  = typeOfLossIdx >= 0 ? document.getElementById('sow-h-' + typeOfLossIdx) : null;
+    var typeOfLoss    = (document.getElementById('sow-type-of-loss')    || {}).value || '—';
+    var waterCategory = (document.getElementById('sow-water-category') || {}).value || '—';
 
     var infoRows = [
       ['PROJECT MANAGER',  (document.getElementById('sow-pm')         || {}).value || '—'],
       ['INSPECTOR / TEAM', (document.getElementById('sow-inspector')   || {}).value || '—'],
       ['JOB NUMBER',       (document.getElementById('sow-job')         || {}).value || '—'],
       ['MITIGATION DATE',  (document.getElementById('sow-mitig-date')  || {}).value || '—'],
-      ['TYPE OF LOSS',     typeOfLossEl ? (typeOfLossEl.value || '—') : '—'],
+      ['TYPE OF LOSS',     typeOfLoss],
+      ['WATER CATEGORY',   waterCategory],
     ];
 
     var cw = (lw - 8) / 2;
